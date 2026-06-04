@@ -800,18 +800,22 @@ function refreshNS() {
 function buildNSTasks(rows) {
   // rows from Excel (Caras Ops Tasks): objects with named columns
   S.ns.tasks = rows.map(function(r, i) {
-    var subject = r['Source Email Subject'] || r.Subject || r['Source_x0020_Email_x0020_Subject'] || '';
-    var body = r['Task Description'] || r.Body || r['Task_x0020_Description'] || '';
-    var sender = r['Email From'] || r['Email_x0020_From'] || r.Sender || '';
-    var date = r['Email Date'] || r['Email_x0020_Date'] || r.ExtractedAt || r['Extracted At'] || '';
+    var subject = r.EmailSubject || '';
+    var body = r.TaskDescription || '';
+    var sender = r.EmailFrom || '';
+    var date = r.EmailDate || r.ExtractedAt || '';
     var owner = r.Owner || '';
     var client = r.Client || '';
-    var dueDate = r['Due Date'] || r['Due_x0020_Date'] || '';
+    var dueDate = r.DueDate || '';
     var status = r.Status || '';
-    // Each row IS already an extracted task — use Task Description as the single task
-    var tasks = body ? [body] : [];
-    if (dueDate && body) tasks = [body + ' (Due: ' + dueDate + ')'];
-    return { id:i, subject:subject, body:body, tag:'NS', date:date, sender:sender, client:client, owner:owner, status:status, tasks:tasks };
+    var notes = r.Notes || '';
+    var priority = r.Priority || '';
+    var type = r.Type || '';
+    // Each row IS already an extracted task — use TaskDescription as the task
+    var taskText = body || subject || notes || '(no description)';
+    if (dueDate) taskText += ' (Due: ' + dueDate + ')';
+    var tasks = [taskText];
+    return { id:i, subject:subject || '(no subject)', body:body, tag:'NS', date:date, sender:sender, client:client, owner:owner, status:status, priority:priority, type:type, tasks:tasks };
   });
 }
 
