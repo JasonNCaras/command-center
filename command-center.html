@@ -799,7 +799,35 @@ function refreshNS() {
 
 function buildNSTasks(rows) {
   // rows from Excel (Caras Ops Tasks): objects with named columns
-  S.ns.tasks = rows.map(function(r, i) {
+  // Deduplicate: when many replies share the same subject, keep only the most recent
+  var seen = {};
+  var deduped = [];
+  rows.forEach(function(r) {
+    // Normalize subject: strip RE:, FW:, FWD:, brackets, extra whitespace
+    var rawSubject = (r.EmailSubject || '').trim();
+    var normalized = rawSubject
+      .replace(/^(re|fw|fwd|aw|tr)\s*:\s*/gi, '')
+      .replace(/^(re|fw|fwd|aw|tr)\s*:\s*/gi, '') // run twice for nested RE: RE:
+      .replace(/^(re|fw|fwd|aw|tr)\s*:\s*/gi, '')
+      .replace(/\[ns\]/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    var key = normalized || ('_' + r.ItemInternalId);
+    var rowDate = new Date(r.EmailDate || r.ExtractedAt || 0).getTime() || 0;
+    if (!seen[key] || rowDate > seen[key].date) {
+      seen[key] = { row: r, date: rowDate };
+    }
+  });
+  Object.keys(seen).forEach(function(k){ deduped.push(seen[k].row); });
+  // Sort newest first
+  deduped.sort(function(a,b){
+    var da = new Date(a.EmailDate || a.ExtractedAt || 0).getTime() || 0;
+    var db = new Date(b.EmailDate || b.ExtractedAt || 0).getTime() || 0;
+    return db - da;
+  });
+
+  S.ns.tasks = deduped.map(function(r, i) {
     var subject = r.EmailSubject || '';
     var body = r.TaskDescription || '';
     var sender = r.EmailFrom || '';
