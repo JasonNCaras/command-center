@@ -338,11 +338,8 @@ body{font-family:'DM Sans',sans-serif;background:#000614;color:#f8f6f3;min-heigh
   </div>
 
   <div class="ns-filters">
-    <div class="ns-filter active" onclick="filterNS('ALL',this)">All</div>
-    <div class="ns-filter" onclick="filterNS('NEXT STEPS',this)">Next Steps</div>
-    <div class="ns-filter" onclick="filterNS('ACTION',this)">Actions</div>
-    <div class="ns-filter" onclick="filterNS('MEETING',this)">Meetings</div>
-    <div class="ns-filter" onclick="filterNS('OPEN',this)">Open Only</div>
+    <div class="ns-filter active" onclick="filterNS('ALL',this)">Open (Active)</div>
+    <div class="ns-filter" onclick="filterNS('DONE',this)">Completed</div>
   </div>
 
   <div class="ns-task-list" id="ns-task-list">
@@ -857,12 +854,12 @@ function filterNS(f, el) {
 function renderNS() {
   var allTasks = (S.ns.tasks || []).concat(S.ns.manualTasks || []);
   var filtered = allTasks.filter(function(t) {
-    if (nsFilter === 'ALL') return true;
-    if (nsFilter === 'OPEN') {
-      var done = t.tasks.every(function(task,i){ return S.ns.completed[t.id+'_'+i]; });
-      return !done;
-    }
-    return t.tag === nsFilter;
+    // Default: hide tasks where every checkbox is checked
+    var fullyDone = t.tasks.length > 0 && t.tasks.every(function(task,i){ return S.ns.completed[t.id+'_'+i]; });
+    if (nsFilter === 'ALL') return !fullyDone;
+    if (nsFilter === 'DONE') return fullyDone;
+    if (nsFilter === 'OPEN') return !fullyDone;
+    return t.tag === nsFilter && !fullyDone;
   });
 
   var total = allTasks.length;
