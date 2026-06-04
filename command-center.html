@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -775,53 +776,42 @@ function refreshNS() {
   dot.className = 'ns-status-dot';
   dot.style.background = '#eab308';
 
-  // Use JSONP to bypass CORS (same pattern as original)
-  var cb = 'nsCallback_' + Date.now();
-  var script = document.createElement('script');
-  script.src = S.ns.url + '?action=load&callback=' + cb;
-
-  window[cb] = function(data) {
-    script.remove();
-    delete window[cb];
-    if (data && data.rows) {
-      S.ns.emailData = data.rows;
-      buildNSTasks(data.rows);
+  // Fetch from Power Automate HTTP trigger (returns Excel data as JSON)
+  fetch(S.ns.url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      // Power Automate returns the "value" array from Excel directly
+      var rows = Array.isArray(data) ? data : (data.value || data.rows || []);
+      S.ns.emailData = rows;
+      buildNSTasks(rows);
       dot.className = 'ns-status-dot green';
       updateLastSync();
       save();
       renderNS();
       renderNSPreview();
       document.getElementById('ns-connect-bar').classList.add('hidden');
-    } else {
+    })
+    .catch(function(err){
+      console.error('NS fetch error:', err);
       dot.className = 'ns-status-dot red';
-    }
-  };
-
-  script.onerror = function() {
-    script.remove();
-    delete window[cb];
-    dot.className = 'ns-status-dot red';
-  };
-
-  document.head.appendChild(script);
-  setTimeout(function(){ if(window[cb]){ script.remove(); delete window[cb]; dot.className='ns-status-dot red'; } }, 8000);
+    });
 }
 
 function buildNSTasks(rows) {
-  // rows from Google Sheet: [Subject, Body, Tag, Date, Sender]
+  // rows from Excel (Caras Ops Tasks): objects with named columns
   S.ns.tasks = rows.map(function(r, i) {
-    var subject = r[0] || '';
-    var body = r[1] || '';
-    var tag = (r[2] || '').replace(/[\[\]]/g,'').trim().toUpperCase();
-    var date = r[3] || '';
-    var sender = r[4] || '';
-    // Extract tasks from body — look for lines that are action-oriented
-    var lines = body.split(/\n/).map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 5; });
-    var tasks = lines.filter(function(l){
-      return /^[-*\d•]/.test(l) || /next step|action|follow up|schedule|send|review|complete|call|meet|update|prepare|draft|confirm/i.test(l);
-    }).slice(0,5);
-    if (!tasks.length && lines.length) tasks = [lines[0]];
-    return { id:i, subject:subject, body:body, tag:tag, date:date, sender:sender, tasks:tasks };
+    var subject = r['Source Email Subject'] || r.Subject || r['Source_x0020_Email_x0020_Subject'] || '';
+    var body = r['Task Description'] || r.Body || r['Task_x0020_Description'] || '';
+    var sender = r['Email From'] || r['Email_x0020_From'] || r.Sender || '';
+    var date = r['Email Date'] || r['Email_x0020_Date'] || r.ExtractedAt || r['Extracted At'] || '';
+    var owner = r.Owner || '';
+    var client = r.Client || '';
+    var dueDate = r['Due Date'] || r['Due_x0020_Date'] || '';
+    var status = r.Status || '';
+    // Each row IS already an extracted task — use Task Description as the single task
+    var tasks = body ? [body] : [];
+    if (dueDate && body) tasks = [body + ' (Due: ' + dueDate + ')'];
+    return { id:i, subject:subject, body:body, tag:'NS', date:date, sender:sender, client:client, owner:owner, status:status, tasks:tasks };
   });
 }
 
