@@ -1065,11 +1065,15 @@ function save() {
   clearTimeout(_syncTimer);
   setSyncStatus('saving');
   _syncTimer = setTimeout(function(){
-    var encoded = encodeURIComponent(JSON.stringify(data));
-    fetch(GAS_URL + '?action=cc_save&data=' + encoded)
-    .then(function(r){ return r.json(); })
-    .then(function(resp){
-      setSyncStatus(resp.ok ? 'saved' : 'error');
+    // GAS requires following the redirect for POST — use no-cors to avoid preflight
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'cc_save', data: data }),
+      redirect: 'follow'
+    })
+    .then(function(){
+      setSyncStatus('saved');
     })
     .catch(function(){
       setSyncStatus('error');
