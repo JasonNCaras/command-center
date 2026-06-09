@@ -1065,10 +1065,8 @@ function save() {
   clearTimeout(_syncTimer);
   setSyncStatus('saving');
   _syncTimer = setTimeout(function(){
-    fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'cc_save', data: data })
-    })
+    var encoded = encodeURIComponent(JSON.stringify(data));
+    fetch(GAS_URL + '?action=cc_save&data=' + encoded)
     .then(function(r){ return r.json(); })
     .then(function(resp){
       setSyncStatus(resp.ok ? 'saved' : 'error');
