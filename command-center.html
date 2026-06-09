@@ -523,7 +523,10 @@ html, body { background:#000614; color:#f8f6f3; font-family:'Jost',sans-serif; m
 <!-- HEADER -->
 <div class="header">
   <div class="logo">CARAS <span>COMMAND</span> CENTER</div>
-  <div class="header-time" id="header-time"></div>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div id="sync-status" style="font-size:11px;color:#22c55e;letter-spacing:0.06em;">✓ Synced</div>
+    <div class="header-time" id="header-time"></div>
+  </div>
 </div>
 
 <!-- NAV -->
@@ -971,6 +974,9 @@ html, body { background:#000614; color:#f8f6f3; font-family:'Jost',sans-serif; m
 // ── STATE ──────────────────────────────────────────────────────────
 const PA_URL = 'https://default749eb578361a4823b72ff474619ee3.66.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/db1439c82fce452699a8c33fda6615b1/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=zuNHxqKiJuj3FdvJ1mhVftttXrtxiRQC_7_sJ6X9Xk8';
 
+// Google Apps Script Web App URL — Caras Task Engine
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyJreWp4l0R9g3H3eY6MvSuTM-I-l4yzxRBoOhbrV3Cd0yzZusk5Lkse0ToDH3e5rjC/exec';
+
 var S = {
   metrics: { cashMRR:0, ytdOneTime:0, cashBalance:0, runway:0, capacity:0 },
   streams: [],
@@ -985,27 +991,105 @@ var S = {
   editingMetric: null
 };
 
+// ── Sync status indicator ──────────────────────────────────────────
+var _syncTimer = null;
+function setSyncStatus(state) {
+  var el = document.getElementById('sync-status');
+  if (!el) return;
+  if (state === 'saving')  { el.textContent = '↑ Saving…';  el.style.color = '#eab308'; }
+  if (state === 'saved')   { el.textContent = '✓ Synced';   el.style.color = '#22c55e'; }
+  if (state === 'error')   { el.textContent = '⚠ Sync error'; el.style.color = '#ef4444'; }
+  if (state === 'loading') { el.textContent = '↓ Loading…'; el.style.color = '#eab308'; }
+}
+
+// ── Load from Google Sheet (falls back to localStorage) ────────────
 function load() {
+  // Always seed from localStorage first so UI isn't blank while fetching
   try {
     var raw = localStorage.getItem('caras_cc_v3');
     if (raw) {
       var saved = JSON.parse(raw);
-      Object.assign(S.metrics, saved.metrics || {});
-      S.streams    = saved.streams    || [];
-      S.clients    = saved.clients    || [];
-      S.deals      = saved.deals      || [];
-      S.projects   = saved.projects   || [];
-      S.priorities = saved.priorities || [];
-      S.wins       = saved.wins       || [];
-      S.todos      = saved.todos      || [];
-      // Migrate old todos if they have no id
-      S.todos = S.todos.map(function(t,i){ return Object.assign({id: t.id || Date.now()+i}, t); });
+      applyState(saved);
     }
   } catch(e){}
+
+  // Then fetch from Google Sheet for cross-device sync
+  setSyncStatus('loading');
+  fetch(GAS_URL + '?action=cc_load')
+    .then(function(r){ return r.json(); })
+    .then(function(resp){
+      if (resp.ok && resp.data) {
+        applyState(resp.data);
+        // Write back to localStorage as cache
+        try { localStorage.setItem('caras_cc_v3', JSON.stringify(getStateToSave())); } catch(e){}
+        renderAll();
+      }
+      setSyncStatus('saved');
+    })
+    .catch(function(){
+      setSyncStatus('error');
+    });
 }
+
+function applyState(saved) {
+  Object.assign(S.metrics, saved.metrics || {});
+  S.streams    = saved.streams    || [];
+  S.clients    = saved.clients    || [];
+  S.deals      = saved.deals      || [];
+  S.projects   = saved.projects   || [];
+  S.priorities = saved.priorities || [];
+  S.wins       = saved.wins       || [];
+  S.todos      = saved.todos      || [];
+  S.todos = S.todos.map(function(t,i){ return Object.assign({id: t.id || Date.now()+i}, t); });
+}
+
+function getStateToSave() {
+  return {
+    metrics:    S.metrics,
+    streams:    S.streams,
+    clients:    S.clients,
+    deals:      S.deals,
+    projects:   S.projects,
+    priorities: S.priorities,
+    wins:       S.wins,
+    todos:      S.todos
+  };
+}
+
+// ── Save: debounced, writes to Sheet + localStorage ─────────────────
 function save() {
-  try { localStorage.setItem('caras_cc_v3', JSON.stringify(S)); } catch(e){}
+  var data = getStateToSave();
+  // Always write to localStorage immediately as backup
+  try { localStorage.setItem('caras_cc_v3', JSON.stringify(data)); } catch(e){}
+  // Debounce sheet writes — wait 1.5s of inactivity before saving
+  clearTimeout(_syncTimer);
+  setSyncStatus('saving');
+  _syncTimer = setTimeout(function(){
+    fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'cc_save', data: data })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(resp){
+      setSyncStatus(resp.ok ? 'saved' : 'error');
+    })
+    .catch(function(){
+      setSyncStatus('error');
+    });
+  }, 1500);
 }
+
+function renderAll() {
+  renderMetrics();
+  renderRevenue();
+  renderClients();
+  renderPipeline();
+  renderTodos();
+  renderPriorities();
+  renderWins();
+  renderProjects();
+}
+
 load();
 
 // ── CLOCK ──────────────────────────────────────────────────────────
@@ -1553,14 +1637,7 @@ function escHtml(s) {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────
-renderMetrics();
-renderRevenue();
-renderClients();
-renderPipeline();
-renderTodos();
-renderPriorities();
-renderWins();
-renderProjects();
+renderAll();
 renderPrompts();
 // Auto-load NS on startup
 setTimeout(refreshNS, 800);
