@@ -1246,60 +1246,90 @@ function renderPipeline() {
 
 // ── TODO ───────────────────────────────────────────────────────────
 var _todoFilter = 'open';
+
 function addTodo() {
   var input = document.getElementById('todo-input');
   var text = input.value.trim();
   if (!text) return;
-  var id = 'td-' + Date.now();
-  S.todos.unshift({ id: id, text: text, done: false, created: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) });
+  S.todos.unshift({ id: Date.now(), text: text, done: false, created: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) });
   input.value = '';
   save(); renderTodos();
 }
-function toggleTodo(id) {
-  for (var i=0; i<S.todos.length; i++) {
-    if (String(S.todos[i].id) === String(id)) {
-      S.todos[i].done = !S.todos[i].done;
-      break;
-    }
-  }
-  save(); renderTodos();
-}
-function deleteTodo(id) {
-  S.todos = S.todos.filter(function(t){ return String(t.id) !== String(id); });
-  save(); renderTodos();
-}
+
 function setTodoFilter(f, btn) {
   _todoFilter = f;
   document.querySelectorAll('#todo-filter-tabs .ns-filter-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   renderTodos();
 }
+
 function renderTodos() {
   var open = S.todos.filter(function(t){ return !t.done; });
   var done = S.todos.filter(function(t){ return t.done; });
   document.getElementById('todo-count-label').textContent = open.length+' open · '+done.length+' done';
   var list = _todoFilter === 'open' ? open : _todoFilter === 'done' ? done : S.todos;
   var el = document.getElementById('todo-items');
+  el.innerHTML = '';
   if (!list.length) {
-    el.innerHTML = '<div class="ns-empty"><div class="ns-empty-icon">☑️</div><div>'+
+    var empty = document.createElement('div');
+    empty.className = 'ns-empty';
+    empty.innerHTML = '<div class="ns-empty-icon">&#9745;</div><div>'+
       (_todoFilter==='open' ? 'No open tasks. Add one above.' :
        _todoFilter==='done' ? 'No completed tasks yet.' : 'No tasks yet.')+
-    '</div></div>';
+    '</div>';
+    el.appendChild(empty);
     return;
   }
-  var html = '';
   for (var i=0; i<list.length; i++) {
     var t = list[i];
-    var sid = String(t.id);
-    html += '<div class="todo-item">'+
-      '<div class="todo-checkbox'+(t.done?' checked':'')+'" onclick="toggleTodo(\''+sid+'\')"></div>'+
-      '<div class="todo-text'+(t.done?' done':'')+'">'+escHtml(t.text)+'</div>'+
-      '<div class="todo-meta">'+escHtml(t.created||'')+'</div>'+
-      '<button class="delete-btn" onclick="deleteTodo(\''+sid+'\')" title="Remove">✕</button>'+
-    '</div>';
+    var row = document.createElement('div');
+    row.className = 'todo-item';
+    row.setAttribute('data-id', t.id);
+
+    var chk = document.createElement('div');
+    chk.className = 'todo-checkbox' + (t.done ? ' checked' : '');
+    chk.setAttribute('data-action', 'toggle');
+
+    var txt = document.createElement('div');
+    txt.className = 'todo-text' + (t.done ? ' done' : '');
+    txt.textContent = t.text;
+
+    var meta = document.createElement('div');
+    meta.className = 'todo-meta';
+    meta.textContent = t.created || '';
+
+    var del = document.createElement('button');
+    del.className = 'delete-btn';
+    del.setAttribute('data-action', 'delete');
+    del.setAttribute('title', 'Remove');
+    del.textContent = '\u2715';
+
+    row.appendChild(chk);
+    row.appendChild(txt);
+    row.appendChild(meta);
+    row.appendChild(del);
+    el.appendChild(row);
   }
-  el.innerHTML = html;
 }
+
+// Single delegated listener on the todo container
+document.getElementById('todo-items').addEventListener('click', function(e) {
+  var target = e.target;
+  var action = target.getAttribute('data-action');
+  if (!action) return;
+  var row = target.closest('[data-id]');
+  if (!row) return;
+  var id = Number(row.getAttribute('data-id'));
+  if (action === 'toggle') {
+    for (var i=0; i<S.todos.length; i++) {
+      if (S.todos[i].id === id) { S.todos[i].done = !S.todos[i].done; break; }
+    }
+    save(); renderTodos();
+  } else if (action === 'delete') {
+    S.todos = S.todos.filter(function(t){ return t.id !== id; });
+    save(); renderTodos();
+  }
+});
 
 // ── PRIORITIES ─────────────────────────────────────────────────────
 function addPriority() {
