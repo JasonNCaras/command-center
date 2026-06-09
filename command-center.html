@@ -528,14 +528,14 @@ html, body { background:#000614; color:#f8f6f3; font-family:'Jost',sans-serif; m
 
 <!-- NAV -->
 <div class="nav">
-  <button class="nav-btn active" onclick="showTab('overview')">Overview</button>
-  <button class="nav-btn" onclick="showTab('revenue')">Revenue</button>
-  <button class="nav-btn" onclick="showTab('clients')">Clients</button>
-  <button class="nav-btn" onclick="showTab('pipeline')">Pipeline</button>
-  <button class="nav-btn" onclick="showTab('todo')">✓ To Do</button>
-  <button class="nav-btn" onclick="showTab('nextsteps')">📧 Next Steps</button>
-  <button class="nav-btn" onclick="showTab('projects')">Projects</button>
-  <button class="nav-btn" onclick="showTab('prompts')">Prompts</button>
+  <button class="nav-btn active" onclick="showTab('overview',this)">Overview</button>
+  <button class="nav-btn" onclick="showTab('revenue',this)">Revenue</button>
+  <button class="nav-btn" onclick="showTab('clients',this)">Clients</button>
+  <button class="nav-btn" onclick="showTab('pipeline',this)">Pipeline</button>
+  <button class="nav-btn" onclick="showTab('todo',this)">✓ To Do</button>
+  <button class="nav-btn" onclick="showTab('nextsteps',this)">📧 Next Steps</button>
+  <button class="nav-btn" onclick="showTab('projects',this)">Projects</button>
+  <button class="nav-btn" onclick="showTab('prompts',this)">Prompts</button>
 </div>
 
 <!-- ════════════════════════════════════════
@@ -1018,11 +1018,11 @@ function updateClock() {
 updateClock(); setInterval(updateClock, 30000);
 
 // ── TABS ──────────────────────────────────────────────────────────
-function showTab(name) {
+function showTab(name, btn) {
   document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
   document.getElementById('tab-'+name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  if (btn) btn.classList.add('active');
   if (name === 'nextsteps') refreshNS();
 }
 
@@ -1247,18 +1247,25 @@ function renderPipeline() {
 // ── TODO ───────────────────────────────────────────────────────────
 var _todoFilter = 'open';
 function addTodo() {
-  var text = document.getElementById('todo-input').value.trim();
+  var input = document.getElementById('todo-input');
+  var text = input.value.trim();
   if (!text) return;
-  S.todos.unshift({ id: Date.now(), text: text, done: false, created: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) });
-  document.getElementById('todo-input').value = '';
+  var id = 'td-' + Date.now();
+  S.todos.unshift({ id: id, text: text, done: false, created: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) });
+  input.value = '';
   save(); renderTodos();
 }
 function toggleTodo(id) {
-  var t = S.todos.find(function(t){ return t.id===id; });
-  if (t) { t.done = !t.done; save(); renderTodos(); }
+  for (var i=0; i<S.todos.length; i++) {
+    if (String(S.todos[i].id) === String(id)) {
+      S.todos[i].done = !S.todos[i].done;
+      break;
+    }
+  }
+  save(); renderTodos();
 }
 function deleteTodo(id) {
-  S.todos = S.todos.filter(function(t){ return t.id!==id; });
+  S.todos = S.todos.filter(function(t){ return String(t.id) !== String(id); });
   save(); renderTodos();
 }
 function setTodoFilter(f, btn) {
@@ -1274,17 +1281,24 @@ function renderTodos() {
   var list = _todoFilter === 'open' ? open : _todoFilter === 'done' ? done : S.todos;
   var el = document.getElementById('todo-items');
   if (!list.length) {
-    el.innerHTML = '<div class="ns-empty"><div class="ns-empty-icon">☑️</div><div>'+(_todoFilter==='open'?'No open tasks. Add one above.':_todoFilter==='done'?'No completed tasks yet.':'No tasks yet.')+'</div></div>';
+    el.innerHTML = '<div class="ns-empty"><div class="ns-empty-icon">☑️</div><div>'+
+      (_todoFilter==='open' ? 'No open tasks. Add one above.' :
+       _todoFilter==='done' ? 'No completed tasks yet.' : 'No tasks yet.')+
+    '</div></div>';
     return;
   }
-  el.innerHTML = list.map(function(t){
-    return '<div class="todo-item" id="todo-'+t.id+'">'+
-      '<div class="todo-checkbox'+(t.done?' checked':'')+'" onclick="toggleTodo('+t.id+')"></div>'+
+  var html = '';
+  for (var i=0; i<list.length; i++) {
+    var t = list[i];
+    var sid = String(t.id);
+    html += '<div class="todo-item">'+
+      '<div class="todo-checkbox'+(t.done?' checked':'')+'" onclick="toggleTodo(\''+sid+'\')"></div>'+
       '<div class="todo-text'+(t.done?' done':'')+'">'+escHtml(t.text)+'</div>'+
-      '<div class="todo-meta">'+t.created+'</div>'+
-      '<button class="delete-btn" onclick="deleteTodo('+t.id+')" title="Remove">✕</button>'+
+      '<div class="todo-meta">'+escHtml(t.created||'')+'</div>'+
+      '<button class="delete-btn" onclick="deleteTodo(\''+sid+'\')" title="Remove">✕</button>'+
     '</div>';
-  }).join('');
+  }
+  el.innerHTML = html;
 }
 
 // ── PRIORITIES ─────────────────────────────────────────────────────
@@ -1436,6 +1450,7 @@ function renderNS() {
     return;
   }
   el.innerHTML = list.map(function(t){
+    var sid = String(t.id);
     return '<div class="ns-item">'+
       '<div>'+
         '<div class="ns-item-subject">'+escHtml(t.subject)+'</div>'+
@@ -1447,7 +1462,7 @@ function renderNS() {
         '</div>'+
       '</div>'+
       '<div class="ns-item-actions">'+
-        (t.status!=='Completed' ? '<button class="ns-complete-btn" onclick="completeNSTask(\''+t.id+'\')">✓ Done</button>' : '<span class="tag tag-green">Done</span>')+
+        (t.status!=='Completed' ? '<button class="ns-complete-btn" onclick="completeNSTask(\''+sid+'\')">✓ Done</button>' : '<span class="tag tag-green">Done</span>')+
       '</div>'+
     '</div>';
   }).join('');
